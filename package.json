@@ -1,6 +1,6 @@
 {
   "name": "rete-callback-sockets-plugin",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A rete plugin to allow callbacks to be used to check compatibility of sockets",
   "scripts": {
     "build": "tsup ./src/index.ts --dts --format esm",

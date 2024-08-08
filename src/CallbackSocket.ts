@@ -4,7 +4,7 @@ import { TypeInterface } from './types';
 export class CallbackSocket<
   T extends TypeInterface
 > extends ClassicPreset.Socket {
-  protected readonly type: T;
+  public readonly type: T;
 
   constructor(type: T) {
     super('AdvancedSocket');
