@@ -1,49 +1,59 @@
-import { ClassicPreset, NodeEditor, Root, Scope } from 'rete';
+import { ClassicPreset, NodeEditor, NodeId, Root, Scope } from 'rete';
 import { CallbackSocket } from './CallbackSocket';
-import { CallbackSocketsScheme, Connection, TypeInterface } from './types';
+import { CallbackSocketsScheme, Connection } from './types';
 
 export class CallbackSocketsPlugin<
-  T extends TypeInterface,
   Scheme extends CallbackSocketsScheme
 > extends Scope<never, [Root<Scheme>]> {
+
+  private editor!: NodeEditor<Scheme>;
+
   constructor() {
     super('FormulaPlugin');
   }
 
   override setParent(scope: Scope<Root<Scheme>, []>): void {
     super.setParent(scope);
-    const editor = this.parentScope<NodeEditor<Scheme>>(NodeEditor<Scheme>);
+    this.editor = this.parentScope<NodeEditor<Scheme>>(NodeEditor<Scheme>);
     this.addPipe((context: Root<Scheme>) => {
       switch (context.type) {
         case 'connectioncreate':
-          const [outputSocket, inputSocket] = this.socketsByConnection(
-            context.data,
-            editor
-          );
-          if(outputSocket instanceof CallbackSocket !== inputSocket instanceof CallbackSocket) {
-            return undefined;
-          }
-          if (
-            !(outputSocket instanceof CallbackSocket) ||
-            !(inputSocket instanceof CallbackSocket)
-          ) {
+          const [outputSocket, inputSocket] = this.socketsByConnection(context.data);
+          if (CallbackSocketsPlugin.compareSockets(outputSocket, inputSocket)) {
             return context;
-          }
-          if (!outputSocket.assignableBy(inputSocket)) {
+          } else {
             return undefined;
           }
-          break;
       }
       return context;
     });
   }
 
+  private static compareSockets(outputSocket: ClassicPreset.Socket | undefined, inputSocket: ClassicPreset.Socket | undefined): boolean {
+    if (outputSocket instanceof CallbackSocket !== outputSocket instanceof CallbackSocket) {
+      return false;
+    }
+    if (!(outputSocket instanceof CallbackSocket) || !(inputSocket instanceof CallbackSocket)) {
+      return true;
+    }
+    return outputSocket.assignableBy(inputSocket);
+  }
+
+  async updateTypes(node: NodeId): Promise<void> {
+    const connections = this.editor.getConnections().filter(c => c.source === node || c.target === node);
+    for (const connection of connections) {
+      const [outputSocket, inputSocket] = this.socketsByConnection(connection);
+      if (!CallbackSocketsPlugin.compareSockets(outputSocket, inputSocket)) {
+        await this.editor.removeConnection(connection.id);
+      }
+    }
+  }
+
   private socketsByConnection(
     connection: Connection,
-    editor: NodeEditor<Scheme>
   ): [ClassicPreset.Socket | undefined, ClassicPreset.Socket | undefined] {
-    const sourceNode = editor.getNode(connection.source);
-    const targetNode = editor.getNode(connection.target);
+    const sourceNode = this.editor.getNode(connection.source);
+    const targetNode = this.editor.getNode(connection.target);
     const output = sourceNode.outputs[connection.sourceOutput];
     const input = targetNode.inputs[connection.targetInput];
 
