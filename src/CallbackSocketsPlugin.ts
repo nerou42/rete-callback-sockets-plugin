@@ -1,86 +1,95 @@
-import { ClassicPreset, ConnectionId, NodeEditor, NodeId, Root, Scope } from 'rete';
+import { ClassicPreset, NodeEditor, NodeId, Root, Scope } from 'rete';
 import { CallbackSocket } from './CallbackSocket';
 import { CallbackSocketsScheme, Connection } from './types';
 
 export type Side = 'input' | 'output';
 
-export interface ConnectionRemovedEvent<Scheme extends CallbackSocketsScheme> {
+type ElementTypes<T> = T[keyof T];
+
+export interface ConnectionRemovedEvent {
   type: 'connectionremoved';
-  connection: Scheme['Connection'];
+  connection: Connection;
 }
 
-export interface ConnectionAddedEvent<Scheme extends CallbackSocketsScheme> {
+export interface ConnectionAddedEvent<Socket extends ClassicPreset.Socket> {
   type: 'connectioncreated';
-  connection: Scheme['Connection'];
-  otherSocket: ClassicPreset.Socket
+  connection: Connection;
+  otherSocket: Socket
 }
 
-export interface ConnectionChangedEvent<Scheme extends CallbackSocketsScheme> {
+export interface ConnectionChangedEvent<Socket extends ClassicPreset.Socket> {
   type: 'connectionchanged';
-  connection: Scheme['Connection'],
-  otherSocket: ClassicPreset.Socket
+  connection: Connection,
+  otherSocket: Socket
 }
 
-export type ConnectionEvent<Scheme extends CallbackSocketsScheme> = ConnectionRemovedEvent<Scheme> | ConnectionAddedEvent<Scheme> | ConnectionChangedEvent<Scheme>;
+export type ConnectionEvent<Socket extends ClassicPreset.Socket> = ConnectionRemovedEvent | ConnectionAddedEvent<Socket> | ConnectionChangedEvent<Socket>;
 
-export type NodeConnectionListener<Scheme extends CallbackSocketsScheme> = (
-  event: ConnectionEvent<Scheme>
+export type NodeConnectionListener<Socket extends ClassicPreset.Socket> = (
+  event: ConnectionEvent<Socket>
 ) => Promise<void> | void;
 
-export interface NodeDependency<Scheme extends CallbackSocketsScheme> {
-  addPortListener(side: Side, key: string, listener: NodeConnectionListener<Scheme>): void;
-  removePortListener(side: Side, key: string, listener: NodeConnectionListener<Scheme>): void;
+export interface NodeDependency<Scheme extends CallbackSocketsScheme, Socket extends ClassicPreset.Socket> {
+  addPortListener(node: Scheme['Node'], side: Side, key: string, listener: NodeConnectionListener<Socket>): void;
+  removePortListener(node: Scheme['Node'], side: Side, key: string, listener: NodeConnectionListener<Socket>): void;
+  addNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
+  removeNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
+  updateSocket(node: Scheme['Node'], side: Side, key: string, socket: ClassicPreset.Socket): Promise<void>;
 }
 
 export class CallbackSocketsPlugin<
-  Scheme extends CallbackSocketsScheme
-> extends Scope<never, [Root<Scheme>]> {
+  Scheme extends CallbackSocketsScheme,
+  Socket extends ClassicPreset.Socket
+> extends Scope<never, [Root<Scheme>]> implements NodeDependency<Scheme, Socket> {
 
   private editor!: NodeEditor<Scheme>;
 
-  private readonly portListeners: Record<NodeId, Record<Side, Record<string, NodeConnectionListener<Scheme>[]>>> = {}
+  private readonly portListeners: Record<NodeId, Record<Side, Record<string, NodeConnectionListener<Socket>[]>>> = {}
+  private readonly nodeListeners: Record<NodeId, NodeConnectionListener<Socket>[]> = {}
 
   constructor() {
-    super('FormulaPlugin');
+    super('CallbackSocketsPlugin');
   }
 
-  buildNodeDependency(nodeID: NodeId): NodeDependency<Scheme> {
-    return {
-      addPortListener: (side: Side, key: string, listener: NodeConnectionListener<Scheme>) => this.addPortListener(nodeID, side, key, listener),
-      removePortListener: (side: Side, key: string, listener: NodeConnectionListener<Scheme>) => this.removePortListener(nodeID, side, key, listener),
+  addNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void {
+    if(this.nodeListeners[node.id] === undefined) {
+      this.nodeListeners[node.id] = [];
     }
+    this.nodeListeners[node.id].push(listener);
   }
 
-  addPortListener(nodeID: NodeId, side: Side, key: string, listener: NodeConnectionListener<Scheme>): void {
-    if (this.portListeners[nodeID] === undefined) {
-      this.portListeners[nodeID] = { input: {}, output: {} };
+  removeNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void {
+    if(this.nodeListeners[node.id] === undefined) {
+      return
     }
-    if (this.portListeners[nodeID][side][key] === undefined) {
-      this.portListeners[nodeID][side][key] = [];
-    }
-    this.portListeners[nodeID][side][key].push(listener);
+    this.nodeListeners[node.id] = this.nodeListeners[node.id].filter(l => l != listener);
   }
 
-  removePortListener(nodeID: NodeId, side: Side, key: string, listener: NodeConnectionListener<Scheme>): void {
-    const a: Record<string, NodeConnectionListener<Scheme>[]> = {};
-    if (this.portListeners[nodeID] === undefined) {
+  addPortListener(node: Scheme['Node'], side: Side, key: string, listener: NodeConnectionListener<Socket>): void {
+    if (this.portListeners[node.id] === undefined) {
+      this.portListeners[node.id] = { input: {}, output: {} };
+    }
+    if (this.portListeners[node.id][side][key] === undefined) {
+      this.portListeners[node.id][side][key] = [];
+    }
+    this.portListeners[node.id][side][key].push(listener);
+  }
+
+  removePortListener(node: Scheme['Node'], side: Side, key: string, listener: NodeConnectionListener<Socket>): void {
+    if (this.portListeners[node.id]?.[side]?.[key]  === undefined) {
       return;
     }
-    if (this.portListeners[nodeID][side][key] === undefined) {
-      return;
-    }
-    this.portListeners[nodeID][side][key] = this.portListeners[nodeID][side][key].filter(l => l != listener);
+    this.portListeners[node.id][side][key] = this.portListeners[node.id][side][key].filter(l => l != listener);
   }
 
-  async updateSocket(nodeID: NodeId, side: Side, key: string, socket: ClassicPreset.Socket) {
-    const node = this.editor.getNode(nodeID);
+  async updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket) {
     let connections = [];
     if (side === 'input') {
       node.inputs[key]!.socket = socket;
-      connections = this.editor.getConnections().filter(c => c.target === nodeID && c.targetInput === key);
+      connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     } else {
       node.outputs[key]!.socket = socket;
-      connections = this.editor.getConnections().filter(c => c.target === nodeID && c.targetInput === key);
+      connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     }
     for (const connection of connections) {
       await this.recheckConnection(connection);
@@ -88,16 +97,16 @@ export class CallbackSocketsPlugin<
     // refetch connections in case some got removed
     if (side === 'input') {
       node.inputs[key]!.socket = socket;
-      connections = this.editor.getConnections().filter(c => c.target === nodeID && c.targetInput === key);
+      connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     } else {
       node.outputs[key]!.socket = socket;
-      connections = this.editor.getConnections().filter(c => c.target === nodeID && c.targetInput === key);
+      connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     }
     for (const connection of connections) {
       if (side === 'input') {
-        this.portListeners[connection.source]?.['output']?.[connection.sourceOutput].forEach(l => l({ type: 'connectionchanged', connection, otherSocket: socket }));
+        this.triggerEvent(connection.source, 'output', connection.sourceOutput, { type: 'connectionchanged', connection, otherSocket: socket });
       } else {
-        this.portListeners[connection.target]?.['input']?.[connection.targetInput].forEach(l => l({ type: 'connectionchanged', connection, otherSocket: socket }));
+        this.triggerEvent(connection.target, 'input', connection.targetInput, { type: 'connectionchanged', connection, otherSocket: socket });
       }
     }
   }
@@ -127,16 +136,21 @@ export class CallbackSocketsPlugin<
           break;
         case 'connectioncreated':
           const [outputSocket1, inputSocket1] = this.socketsByConnection(context.data);
-          this.portListeners[context.data.source]?.['output']?.[context.data.sourceOutput].forEach(l => l({ type: 'connectioncreated', connection: context.data, otherSocket: inputSocket1 }));
-          this.portListeners[context.data.target]?.['input']?.[context.data.targetInput].forEach(l => l({ type: 'connectioncreated', connection: context.data, otherSocket: outputSocket1 }));
+          this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectioncreated', connection: context.data, otherSocket: inputSocket1 });
+          this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectioncreated', connection: context.data, otherSocket: outputSocket1 });
           break;
         case 'connectionremoved':
-          this.portListeners[context.data.source]?.['output']?.[context.data.sourceOutput].forEach(l => l({ type: 'connectionremoved', connection: context.data }));
-          this.portListeners[context.data.target]?.['input']?.[context.data.targetInput].forEach(l => l({ type: 'connectionremoved', connection: context.data }));
+          this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectionremoved', connection: context.data });
+          this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectionremoved', connection: context.data });
           break;
       }
       return context;
     });
+  }
+
+  private triggerEvent(nodeID: NodeId, side: Side, key: string, event: ConnectionEvent<Socket>) {
+    this.nodeListeners[nodeID]?.forEach(l => l(event));
+    this.portListeners[nodeID]?.[side]?.[key].forEach(l => l(event));
   }
 
   private static compareSockets(outputSocket: ClassicPreset.Socket, inputSocket: ClassicPreset.Socket): boolean {
@@ -161,12 +175,12 @@ export class CallbackSocketsPlugin<
 
   private socketsByConnection(
     connection: Connection,
-  ): [ClassicPreset.Socket, ClassicPreset.Socket] {
+  ): [Socket, Socket] {
     const sourceNode = this.editor.getNode(connection.source);
     const targetNode = this.editor.getNode(connection.target);
     const output = sourceNode.outputs[connection.sourceOutput];
     const input = targetNode.inputs[connection.targetInput];
 
-    return [output!.socket, input!.socket];
+    return [output!.socket as Socket, input!.socket as Socket];
   }
 }
