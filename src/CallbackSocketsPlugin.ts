@@ -85,9 +85,15 @@ export class CallbackSocketsPlugin<
   async updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket) {
     let connections = [];
     if (side === 'input') {
+      if(!node.hasInput(key)) {
+        return;
+      }
       node.inputs[key]!.socket = socket;
       connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     } else {
+      if(!node.hasOutput(key)) {
+        return;
+      }
       node.outputs[key]!.socket = socket;
       connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     }
@@ -125,7 +131,7 @@ export class CallbackSocketsPlugin<
   override setParent(scope: Scope<Root<Scheme>, []>): void {
     super.setParent(scope);
     this.editor = this.parentScope<NodeEditor<Scheme>>(NodeEditor<Scheme>);
-    this.addPipe((context: Root<Scheme>) => {
+    this.addPipe(async (context: Root<Scheme>) => {
       switch (context.type) {
         case 'connectioncreate':
           if(!this.isConnectionValid(context.data)) {
@@ -136,21 +142,29 @@ export class CallbackSocketsPlugin<
           break;
         case 'connectioncreated':
           const [outputSocket1, inputSocket1] = this.socketsByConnection(context.data);
-          this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectioncreated', connection: context.data, otherSocket: inputSocket1 });
-          this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectioncreated', connection: context.data, otherSocket: outputSocket1 });
+          await this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectioncreated', connection: context.data, otherSocket: inputSocket1 });
+          await this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectioncreated', connection: context.data, otherSocket: outputSocket1 });
           break;
         case 'connectionremoved':
-          this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectionremoved', connection: context.data });
-          this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectionremoved', connection: context.data });
+          await this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectionremoved', connection: context.data });
+          await this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectionremoved', connection: context.data });
           break;
       }
       return context;
     });
   }
 
-  private triggerEvent(nodeID: NodeId, side: Side, key: string, event: ConnectionEvent<Socket>) {
-    this.nodeListeners[nodeID]?.forEach(l => l(event));
-    this.portListeners[nodeID]?.[side]?.[key].forEach(l => l(event));
+  private async triggerEvent(nodeID: NodeId, side: Side, key: string, event: ConnectionEvent<Socket>): Promise<void> {
+    if(this.nodeListeners[nodeID]) {
+      for (const l of this.nodeListeners[nodeID]) {
+        await l(event);
+      }
+    }
+    if(this.portListeners[nodeID]?.[side]?.[key]) {
+      for (const l of this.portListeners[nodeID]?.[side]?.[key]) {
+        await l(event); 
+      }
+    }
   }
 
   private static compareSockets(outputSocket: ClassicPreset.Socket, inputSocket: ClassicPreset.Socket): boolean {
