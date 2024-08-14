@@ -111,7 +111,7 @@ export class CallbackSocketsPlugin<
       if (!node.hasOutput(key)) {
         return;
       }
-      if (typeof (node.inputs[key]!.socket as any)['updateSocket'] === 'function') {
+      if (typeof (node.outputs[key]!.socket as any)['updateSocket'] === 'function') {
         (node.outputs[key]!.socket as any)['updateSocket'](socket);
       } else {
         node.outputs[key]!.socket = socket;
