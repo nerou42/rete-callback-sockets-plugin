@@ -144,6 +144,9 @@ export class CallbackSocketsPlugin<
 
   private isConnectionValid(connection: Scheme['Connection']): boolean {
     const [outputSocket, inputSocket] = this.socketsByConnection(connection);
+    if(!outputSocket || !inputSocket) {
+      return false;
+    }
     return CallbackSocketsPlugin.compareSockets(outputSocket, inputSocket);
   }
 
@@ -161,8 +164,12 @@ export class CallbackSocketsPlugin<
           break;
         case 'connectioncreated':
           const [outputSocket1, inputSocket1] = this.socketsByConnection(context.data);
-          await this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectioncreated', connection: context.data, otherSocket: inputSocket1 });
-          await this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectioncreated', connection: context.data, otherSocket: outputSocket1 });
+          if(inputSocket1) {
+            await this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectioncreated', connection: context.data, otherSocket: inputSocket1 });
+          }
+          if(outputSocket1) {
+            await this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectioncreated', connection: context.data, otherSocket: outputSocket1 });
+          }
           break;
         case 'connectionremoved':
           await this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectionremoved', connection: context.data });
@@ -200,7 +207,7 @@ export class CallbackSocketsPlugin<
     const connections = this.editor.getConnections().filter(c => c.source === node || c.target === node);
     for (const connection of connections) {
       const [outputSocket, inputSocket] = this.socketsByConnection(connection);
-      if (!CallbackSocketsPlugin.compareSockets(outputSocket, inputSocket)) {
+      if (!outputSocket || !inputSocket || !CallbackSocketsPlugin.compareSockets(outputSocket, inputSocket)) {
         await this.editor.removeConnection(connection.id);
       }
     }
@@ -208,12 +215,12 @@ export class CallbackSocketsPlugin<
 
   private socketsByConnection(
     connection: Connection,
-  ): [Socket, Socket] {
+  ): [Socket | null, Socket | null] {
     const sourceNode = this.editor.getNode(connection.source);
     const targetNode = this.editor.getNode(connection.target);
-    const output = sourceNode.outputs[connection.sourceOutput];
-    const input = targetNode.inputs[connection.targetInput];
+    const output = sourceNode?.outputs[connection.sourceOutput];
+    const input = targetNode?.inputs[connection.targetInput];
 
-    return [output!.socket as Socket, input!.socket as Socket];
+    return [(output?.socket ?? null) as Socket | null, (input?.socket ?? null) as Socket | null];
   }
 }
