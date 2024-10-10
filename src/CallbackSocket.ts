@@ -8,6 +8,10 @@ export class CallbackSocket<
 
   constructor(type: T) {
     super('AdvancedSocket');
+    if(type === null || type === undefined) {
+      console.log(type);
+      throw new Error('Type cant be null or undefined');
+    }
     this.type = type;
   }
 
