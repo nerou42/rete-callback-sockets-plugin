@@ -116,7 +116,7 @@ export class CallbackSocketsPlugin<
       } else {
         node.outputs[key]!.socket = socket;
       }
-      connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
+      connections = this.editor.getConnections().filter(c => c.source === node.id && c.sourceOutput === key);
     }
     for (const connection of connections) {
       this.recheckConnection(connection);
@@ -125,7 +125,7 @@ export class CallbackSocketsPlugin<
     if (side === 'input') {
       connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     } else {
-      connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
+      connections = this.editor.getConnections().filter(c => c.source === node.id && c.sourceOutput === key);
     }
     for (const connection of connections) {
       if (side === 'input') {
