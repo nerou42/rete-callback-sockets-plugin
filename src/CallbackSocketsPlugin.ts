@@ -37,7 +37,7 @@ export interface NodeDependency<Scheme extends CallbackSocketsScheme, Socket ext
   updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket): void;
 }
 
-export type SocketUpdatedListener<Scheme extends CallbackSocketsScheme, Socket extends ClassicPreset.Socket> = (node: Scheme['Node'], side: Side, key: string, socket: Socket) => void;
+export type SocketUpdatedListener<Scheme extends CallbackSocketsScheme, Socket extends ClassicPreset.Socket> = (node: Scheme['Node'], side: Side, key: string, socket: Socket) => void | Promise<void>;
 
 export class CallbackSocketsPlugin<
   Scheme extends CallbackSocketsScheme,
@@ -94,7 +94,7 @@ export class CallbackSocketsPlugin<
     this.portListeners[node.id][side][key] = this.portListeners[node.id][side][key].filter(l => l != listener);
   }
 
-  updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket) {
+  async updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket): Promise<void> {
     let connections = [];
     if (side === 'input') {
       if (!node.hasInput(key)) {
@@ -105,7 +105,9 @@ export class CallbackSocketsPlugin<
       } else {
         node.inputs[key]!.socket = socket;
       }
-      this.socketChangedListeners.forEach(l => l(node, side, key, socket));
+      for (const socketChangedListener of this.socketChangedListeners) {
+        await socketChangedListener(node, side, key, socket);
+      }
       connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
     } else {
       if (!node.hasOutput(key)) {
@@ -119,7 +121,7 @@ export class CallbackSocketsPlugin<
       connections = this.editor.getConnections().filter(c => c.source === node.id && c.sourceOutput === key);
     }
     for (const connection of connections) {
-      this.recheckConnection(connection);
+      await this.recheckConnection(connection);
     }
     // refetch connections in case some got removed
     if (side === 'input') {
@@ -129,9 +131,9 @@ export class CallbackSocketsPlugin<
     }
     for (const connection of connections) {
       if (side === 'input') {
-        this.triggerEvent(connection.source, 'output', connection.sourceOutput, { type: 'connectionchanged', connection, otherSocket: socket });
+        await this.triggerEvent(connection.source, 'output', connection.sourceOutput, { type: 'connectionchanged', connection, otherSocket: socket });
       } else {
-        this.triggerEvent(connection.target, 'input', connection.targetInput, { type: 'connectionchanged', connection, otherSocket: socket });
+        await this.triggerEvent(connection.target, 'input', connection.targetInput, { type: 'connectionchanged', connection, otherSocket: socket });
       }
     }
   }
