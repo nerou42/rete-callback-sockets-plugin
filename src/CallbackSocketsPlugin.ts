@@ -140,6 +140,8 @@ export class CallbackSocketsPlugin<
 
   async recheckConnection(connection: Scheme['Connection']): Promise<void> {
     if (!this.isConnectionValid(connection)) {
+      const [outputSocket, inputSocket] = this.socketsByConnection(connection);
+      console.log('Sockets are incompatible!', outputSocket, inputSocket);
       await this.editor.removeConnection(connection.id);
     }
   }
