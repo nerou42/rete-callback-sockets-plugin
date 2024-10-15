@@ -34,7 +34,7 @@ export interface NodeDependency<Scheme extends CallbackSocketsScheme, Socket ext
   removePortListener(node: Scheme['Node'], side: Side, key: string, listener: NodeConnectionListener<Socket>): void;
   addNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
   removeNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
-  updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket): void;
+  updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket): Promise<void>;
 }
 
 export type SocketUpdatedListener<Scheme extends CallbackSocketsScheme, Socket extends ClassicPreset.Socket> = (node: Scheme['Node'], side: Side, key: string, socket: Socket) => void | Promise<void>;
