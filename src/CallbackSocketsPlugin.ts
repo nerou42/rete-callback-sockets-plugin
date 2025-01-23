@@ -122,8 +122,10 @@ export class CallbackSocketsPlugin<
       }
       connections = this.editor.getConnections().filter(c => c.source === node.id && c.sourceOutput === key);
     }
-    for (const connection of connections) {
-      await this.recheckConnection(connection);
+    if(this.typeValidationEnabled) {
+      for (const connection of connections) {
+        await this.recheckConnection(connection);
+      }
     }
     // refetch connections in case some got removed
     if (side === 'input') {
@@ -160,12 +162,9 @@ export class CallbackSocketsPlugin<
     super.setParent(scope);
     this.editor = this.parentScope<NodeEditor<Scheme>>(NodeEditor<Scheme>);
     this.addPipe(async context => {
-      if (!this.typeValidationEnabled) {
-        return context;
-      }
       switch (context.type) {
         case 'connectioncreate':
-          if (!this.isConnectionValid(context.data)) {
+          if (this.typeValidationEnabled && !this.isConnectionValid(context.data)) {
             const [outputSocket, inputSocket] = this.socketsByConnection(context.data);
             console.log('Sockets are incompatible!', outputSocket, inputSocket);
             return undefined;
