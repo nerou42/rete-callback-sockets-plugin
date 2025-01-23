@@ -51,6 +51,8 @@ export class CallbackSocketsPlugin<
 
   private socketChangedListeners: SocketUpdatedListener<Scheme, Socket>[] = [];
 
+  private typeValidationEnabled: boolean = true;
+
   constructor() {
     super('CallbackSocketsPlugin');
   }
@@ -148,7 +150,7 @@ export class CallbackSocketsPlugin<
 
   private isConnectionValid(connection: Scheme['Connection']): boolean {
     const [outputSocket, inputSocket] = this.socketsByConnection(connection);
-    if(!outputSocket || !inputSocket) {
+    if (!outputSocket || !inputSocket) {
       return false;
     }
     return CallbackSocketsPlugin.compareSockets(outputSocket, inputSocket);
@@ -157,7 +159,10 @@ export class CallbackSocketsPlugin<
   override setParent(scope: Scope<Root<Scheme>, []>): void {
     super.setParent(scope);
     this.editor = this.parentScope<NodeEditor<Scheme>>(NodeEditor<Scheme>);
-    this.addPipe(async (context: Root<Scheme>) => {
+    this.addPipe(async context => {
+      if (!this.typeValidationEnabled) {
+        return context;
+      }
       switch (context.type) {
         case 'connectioncreate':
           if (!this.isConnectionValid(context.data)) {
@@ -168,10 +173,10 @@ export class CallbackSocketsPlugin<
           break;
         case 'connectioncreated':
           const [outputSocket1, inputSocket1] = this.socketsByConnection(context.data);
-          if(inputSocket1) {
+          if (inputSocket1) {
             await this.triggerEvent(context.data.source, 'output', context.data.sourceOutput, { type: 'connectioncreated', connection: context.data, otherSocket: inputSocket1 });
           }
-          if(outputSocket1) {
+          if (outputSocket1) {
             await this.triggerEvent(context.data.target, 'input', context.data.targetInput, { type: 'connectioncreated', connection: context.data, otherSocket: outputSocket1 });
           }
           break;
@@ -207,14 +212,30 @@ export class CallbackSocketsPlugin<
     return inputSocket.assignableBy(outputSocket);
   }
 
+  async updateAllTypes(): Promise<void> {
+    const connections = this.editor.getConnections();
+    for (const connection of connections) {
+      await this.recheckConnection(connection);
+    }
+  }
+
   async updateTypes(node: NodeId): Promise<void> {
     const connections = this.editor.getConnections().filter(c => c.source === node || c.target === node);
     for (const connection of connections) {
-      const [outputSocket, inputSocket] = this.socketsByConnection(connection);
-      if (!outputSocket || !inputSocket || !CallbackSocketsPlugin.compareSockets(outputSocket, inputSocket)) {
-        await this.editor.removeConnection(connection.id);
-      }
+      await this.recheckConnection(connection);
     }
+  }
+
+  enableTypeValidation(): void {
+    this.typeValidationEnabled = true;
+  }
+
+  disableTypeValidation(): void {
+    this.typeValidationEnabled = false;
+  }
+
+  isTypeValidationEnabled(): boolean {
+    return this.typeValidationEnabled;
   }
 
   private socketsByConnection(
