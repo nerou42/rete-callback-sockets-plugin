@@ -35,7 +35,7 @@ export interface NodeDependency<Scheme extends CallbackSocketsScheme, Socket ext
   addNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
   removeNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
   updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket): Promise<void>;
-  removeInput(node: Scheme['Node'], side: Side, key: string): Promise<void>;
+  removePort(node: Scheme['Node'], side: Side, key: string): Promise<void>;
 }
 
 export type SocketUpdatedListener<Scheme extends CallbackSocketsScheme, Socket extends ClassicPreset.Socket> = (node: Scheme['Node'], side: Side, key: string, socket: Socket) => void | Promise<void>;
@@ -143,7 +143,7 @@ export class CallbackSocketsPlugin<
     }
   }
 
-  public async removeInput(node: Scheme['Node'], side: Side, key: string): Promise<void> {
+  public async removePort(node: Scheme['Node'], side: Side, key: string): Promise<void> {
     let connections = [];
     if (side === 'input') {
       connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
