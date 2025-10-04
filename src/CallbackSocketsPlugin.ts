@@ -35,6 +35,7 @@ export interface NodeDependency<Scheme extends CallbackSocketsScheme, Socket ext
   addNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
   removeNodeListener(node: Scheme['Node'], listener: NodeConnectionListener<Socket>): void;
   updateSocket(node: Scheme['Node'], side: Side, key: string, socket: Socket): Promise<void>;
+  removeInput(node: Scheme['Node'], side: Side, key: string): Promise<void>;
 }
 
 export type SocketUpdatedListener<Scheme extends CallbackSocketsScheme, Socket extends ClassicPreset.Socket> = (node: Scheme['Node'], side: Side, key: string, socket: Socket) => void | Promise<void>;
@@ -122,7 +123,7 @@ export class CallbackSocketsPlugin<
       }
       connections = this.editor.getConnections().filter(c => c.source === node.id && c.sourceOutput === key);
     }
-    if(this.typeValidationEnabled) {
+    if (this.typeValidationEnabled) {
       for (const connection of connections) {
         await this.recheckConnection(connection);
       }
@@ -140,6 +141,19 @@ export class CallbackSocketsPlugin<
         await this.triggerEvent(connection.target, 'input', connection.targetInput, { type: 'connectionchanged', connection, otherSocket: socket });
       }
     }
+  }
+
+  public async removeInput(node: Scheme['Node'], side: Side, key: string): Promise<void> {
+    let connections = [];
+    if (side === 'input') {
+      connections = this.editor.getConnections().filter(c => c.target === node.id && c.targetInput === key);
+    } else {
+      connections = this.editor.getConnections().filter(c => c.source === node.id && c.sourceOutput === key);
+    }
+    for (const connection of connections) {
+      await this.editor.removeConnection(connection.id);
+    }
+    side === 'input' ? node.removeInput(key) : node.removeOutput(key);
   }
 
   async recheckConnection(connection: Scheme['Connection']): Promise<void> {
