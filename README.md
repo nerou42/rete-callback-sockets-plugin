@@ -1,3 +1,4 @@
+![NPM Version](https://img.shields.io/npm/v/rete-callback-sockets-plugin)
 # Callback Sockets for Rete.js
 
 A Rete.js plugin for advanced type checking through customizable socket comparison logic.
